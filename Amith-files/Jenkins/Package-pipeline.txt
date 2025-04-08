@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+    
+    environment {
+        GIT_BRANCH = 'main'
+    }
+
+    stages {
+    //     stage('Clean Workspace') {
+    //         steps {
+    //             deleteDir()
+    //         }
+    //     }
+
+        stage('Checkout') {
+            steps {
+                // Using the timeout wrapper to specify a timeout for the entire stage
+                timeout(time: 75, unit: 'MINUTES'){
+                    checkout([$class: 'GitSCM', 
+                        branches: [[name: 'main']], 
+                        userRemoteConfigs: [[url: 'D:/SciDent-files/Product/.git']],
+                        extensions: [
+                            [$class: 'LocalBranch', localbranch: 'main'],
+                            [$class: 'CloneOption', timeout: 75, shallow: false]]])// Timeout in minutes
+                        
+                bat'''
+                git branch -a
+                REM to checkout successfully to Devops branch and resolve detached head mode
+                git fetch --all
+                git checkout main
+                git branch
+                '''
+                }
+            }
+        }
+
+        stage('Package-wizard') {
+            steps {
+                bat'''
+                @echo off
+                REM bypass execution policy
+                REM powershell.exe Set -ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+                REM execute ISS script
+                powershell.exe & "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" "D:\\SciDent-files\\Product\\Setup.iss"
+                '''
+            }
+        }
+        
+        // stage('Push') {
+        //     steps {
+        //         script {
+        //             bat '''
+        //             @echo off
+                    
+        //             REM Set Git user configuration
+        //             git config user.email "amithkc02@gmail.com"
+        //             git config user.name "Amith"
+                    
+        //             REM Stage all changes
+        //             git status
+        //             git add .
+                    
+        //             REM Commit the changes with a message
+        //             git commit -m "Automated package-wizard by Jenkins - Build ID: ${BUILD_ID}"
+                    
+        //             REM Push the changes to the remote repository on the main branch
+        //             git push origin main
+        //             '''
+        //         }
+        //     }
+        // }
+    }
+}

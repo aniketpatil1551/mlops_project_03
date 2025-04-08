@@ -1,0 +1,190 @@
+pipeline {
+    agent any
+    
+    environment {
+        GIT_BRANCH = 'Devops'
+    }
+
+    stages {
+    //     stage('Clean Workspace') {
+    //         steps {
+    //             deleteDir()
+    //         }
+    //     }
+        
+        stage('Checkout') {
+            steps{
+                    
+                // Using the timeout wrapper to specify a timeout for the entire stage
+                timeout(time: 120, unit: 'MINUTES'){
+                    checkout scmGit( 
+                        branches: [[name: 'Devops']], // Use wildcard to ensure proper branch matching
+                        userRemoteConfigs: [[url: 'D:/SciDent-files/Product/.git']],
+                        extensions: [
+                            [$class: 'GitLFSPull'], //large file support enabled  
+                            [$class: 'CleanBeforeCheckout'],  // Ensure workspace is clean before checkout
+                            [$class: 'CloneOption', timeout: 120, shallow: false], // Set Git-specific timeout in minutes
+                            [$class: 'LocalBranch', localbranch: 'Devops']])  // Checkout options
+                                
+                bat '''
+                git branch -a
+                REM to checkout successfully to Devops branch and resolve detached head mode
+                git fetch --all
+                git checkout Devops
+                git branch
+                '''
+                }
+            }
+        }
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    bat '''
+                    @echo off
+                    cd /d D:/SciDent-files/Product/client
+                    npm install
+                    '''
+                }
+            }
+        }
+        stage('Parallel build frontend&backend'){
+            parallel{
+                stage('Backend-build-AC') {
+                    steps {
+                        bat '''
+                        @echo off
+            
+                        REM Change to the desired directory
+                        cd /d D:/SciDent-files/Product/server
+                
+                        REM powershell.exe -ExecutionPolicy Bypass -Command ""
+                        powershell.exe Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+            
+                        set VENV_VERBOSE=1
+            
+                        REM Activate the virtual environment (uncomment if needed)
+                        REM call D:/SciDent-files/Product/server/venv/Scripts/activate
+                        call ./venv/Scripts/activate
+            
+                        REM Set the appropriate execution policy (optional)
+                        REM powershell.exe Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+            
+                        REM Run PyInstaller with the full path
+                        D:/SciDent-files/Product/server/venv/Scripts/pyinstaller.exe -y manage.spec
+                        '''
+                    }
+                }
+                stage('Frontend-build-AC') {
+                    steps {
+                        bat '''
+                        @echo off
+            
+                        cd /d D:/SciDent-files/Product/client
+                            
+                        REM powershell.exe Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass 
+                            
+                        REM call C:/Users/admin/AppData/Roaming/npm/electron-builder
+                            
+                        powershell.exe npm run elecbuild
+                        '''
+                    }
+                }
+            }
+        }
+        stage('Parallel Package-frontend and backend secure'){
+            parallel{
+                stage('secure backend') {
+                    steps {
+                        script {
+                            bat '''
+                            @echo off
+                            cd /d D:/SciDent-files/Product
+                            REM run the compile_package.py file to secure the destination dir and remove original py files
+                            C:/Users/admin/AppData/Local/Programs/Python/Python310/python.exe ./compile_package.py ./server/dist/SciDentAI-server/
+                            '''
+                        }
+                    }
+                }
+                stage('Frontend-BuildExecutable-AC') {
+                    steps {
+                        bat '''
+                        @echo off
+            
+                        cd /d D:/SciDent-files/Product/client
+                            
+                        REM powershell.exe Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+                            
+                        echo 'running electron-builder now'
+                        REM call C://Users//admin//AppData//Roaming//npm//electron-builder
+                            
+                        powershell.exe npm run package
+                        '''
+                    }
+                    //post {
+                    //    always {
+                    //        echo 'Cleaning up...'
+                    //        cleanWs()
+                    //    }
+                    //    success {
+                    //        echo 'Build and packaging completed successfully!'
+                    //    }
+                    //    failure {
+                    //        echo 'Build or packaging failed.'
+                    //    }
+                    //}
+                }
+            }
+        }
+        // stage('Push') {
+        //     steps {
+        //         script {
+        //             bat '''
+        //             @echo off
+        //             echo git rev-parse --abbrev-ref HEAD
+                    
+        //             REM Set Git user configuration
+        //             git config user.email "amithkc02@gmail.com"
+        //             git config user.name "Amith"
+                    
+        //             REM Stage all changes
+        //             git add .
+                    
+        //             REM Commit the changes with a message
+        //             git commit -m "Automated server and client build by Jenkins - Build ID: ${BUILD_ID}"
+                    
+        //             REM Push the changes to the remote repository on the main branch
+        //             git push origin HEAD:Devops'''
+        //         }
+        //     }
+        // }
+    //post {
+      //  always {
+        //    echo 'Cleaning up...'
+          //  cleanWs()
+        //}
+        //success {
+          //  echo 'Build and packaging completed successfully!'
+        //}
+        //failure {
+          //  echo 'Build or packaging failed.'
+        //}
+        //}
+    }
+    post {
+        failure {
+            emailext (
+                subject: "Jenkins Pipeline Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                Job Name: ${env.JOB_NAME}
+                Build Number: ${env.BUILD_NUMBER}
+                Build URL: ${env.BUILD_URL}
+                
+                The pipeline has failed. Please check the logs.
+                """,
+                attachmentsPattern: '**/*.log',
+                to: 'amithkc02@gmail.com'
+            )
+        }
+    }
+}
+

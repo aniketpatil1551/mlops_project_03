@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Get the name of the branch that was just committed
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Define the Jenkins job URLs for different triggers
+main_branch_job="http://localhost:8080/job/Scidentai-packaging/build?token=Package_trigger"
+Devops_branch_job="http://localhost:8080/job/Scidentai-build-executable/build?token=Build-trigger"
+
+#the last message from log
+LAST_MESSAGE=$(git log -1 --pretty=%B)
+
+#trigger messages for respective branches
+TARGET_MESSAGE_Devops="Trigger Jenkins-Devops"
+TARGET_MESSAGE_main="Trigger Jenkins-main"
+
+# Trigger Jenkins jobs based on the branch
+if [ "$branch" = "main" ]; then
+    if [[ "$LAST_MESSAGE" == *"$TARGET_MESSAGE_main"* ]]; then
+    	curl --user amithkc:11c20afdcf0017778db3f72faf03c09688 $main_branch_job
+    	echo "jenkins application-package job for main branch in windows triggered"
+    fi
+elif [ "$branch" = "Devops" ]; then
+    if [[ "$LAST_MESSAGE" == *"$TARGET_MESSAGE_Devops"* ]]; then
+    	curl --user amithkc:11c20afdcf0017778db3f72faf03c09688 $Devops_branch_job
+    	echo "jenkins application-build job for Devops branch in windows triggered"
+    fi
+fi
